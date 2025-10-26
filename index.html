@@ -31,57 +31,69 @@
 <script>
   const GH_USER = "atate-innovative-deliveries";
   const GH_REPO = "fluent-icons-hub";
+  const BRANCH = "main";
+  const baseUrl = `https://${GH_USER}.github.io/${GH_REPO}/`;
 
-  const apiUrl = https://api.github.com/repos/\/\/contents/icons;
-  const baseUrl = https://\.github.io/\/icons/;
+  const grid = document.getElementById("grid");
+  const toast = document.getElementById("toast");
+  const q = document.getElementById("q");
+  const copyBaseBtn = document.getElementById("copyBase");
 
-  const grid = document.getElementById('grid');
-  const toast = document.getElementById('toast');
-  const q = document.getElementById('q');
-  const copyBaseBtn = document.getElementById('copyBase');
-
-  function showToast(msg){
+  function showToast(msg) {
     toast.textContent = msg || "Copied!";
-    toast.classList.add('show');
-    setTimeout(()=>toast.classList.remove('show'),1200);
+    toast.classList.add("show");
+    setTimeout(() => toast.classList.remove("show"), 1200);
   }
 
-  function render(items){
+  let ALL = [];
+
+  function render(items) {
     grid.innerHTML = "";
-    items.forEach(f=>{
-      if(!f.name.endsWith(".svg")) return;
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.innerHTML = 
-        <img src="\\" alt="\">
-        <div class="name">\</div>
-      ;
-      card.onclick = async ()=>{
-        const url = \\\\;
-        try { await navigator.clipboard.writeText(url); showToast("URL copied"); }
-        catch(e){ showToast(url); }
+    items.forEach((path) => {
+      const name = path.split("/").pop();
+      const url = baseUrl + path;
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `<img src="${url}" alt="${name}"><div class="name">${name}</div>`;
+      card.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(url);
+          showToast("Copied!");
+        } catch (e) {
+          showToast(url);
+        }
       };
       grid.appendChild(card);
     });
   }
 
-  async function load(){
-    const res = await fetch(apiUrl);
-    if(!res.ok){ grid.innerHTML = "Failed to load icons."; return; }
+  async function load() {
+    const api = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/git/trees/${BRANCH}?recursive=1`;
+    const res = await fetch(api);
+    if (!res.ok) {
+      grid.innerHTML = "❌ Failed to load icons (API limit).";
+      return;
+    }
     const data = await res.json();
-    window._icons = data;
-    render(data);
+    ALL = (data.tree || [])
+      .map((t) => t.path)
+      .filter((p) => p.startsWith("icons/") && p.endsWith(".svg"));
+    render(ALL);
   }
 
-  q.addEventListener('input', ()=>{
+  q.addEventListener("input", () => {
     const term = q.value.trim().toLowerCase();
-    if(!window._icons) return;
-    render(window._icons.filter(f=>f.name.toLowerCase().includes(term)));
+    if (!ALL.length) return;
+    render(ALL.filter((p) => p.toLowerCase().includes(term)));
   });
 
-  copyBaseBtn.onclick = async ()=>{
-    try { await navigator.clipboard.writeText(baseUrl); showToast("Base URL copied"); }
-    catch(e){ showToast(baseUrl); }
+  copyBaseBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(baseUrl);
+      showToast("Base URL copied");
+    } catch (e) {
+      showToast(baseUrl);
+    }
   };
 
   load();
