@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Fluent Icons Hub</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:24px}
+    .top{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    input{padding:10px;border:1px solid #ddd;border-radius:8px;min-width:260px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:16px;margin-top:16px}
+    .card{border:1px solid #eee;border-radius:12px;padding:12px;text-align:center;cursor:pointer}
+    .card:hover{box-shadow:0 2px 10px rgba(0,0,0,.08)}
+    img{width:48px;height:48px;margin:8px auto;display:block}
+    .name{font-size:12px;color:#555;word-break:break-all}
+    .pill{padding:6px 10px;border:1px solid #ddd;border-radius:999px;font-size:12px;cursor:pointer}
+    .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);
+      background:#111;color:#fff;padding:10px 14px;border-radius:10px;opacity:0;transition:.25s}
+    .toast.show{opacity:1}
+  </style>
+</head>
+<body>
+  <div class="top">
+    <input id="q" placeholder="Search icons (e.g., poll, insights, chat)" />
+    <button class="pill" id="copyBase">Copy base URL</button>
+    <span style="font-size:12px;color:#666">Click any icon to copy its direct URL</span>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="toast" id="toast">Copied!</div>
+
+<script>
+  const GH_USER = "atate-innovative-deliveries";
+  const GH_REPO = "fluent-icons-hub";
+
+  const apiUrl = https://api.github.com/repos/\/\/contents/icons;
+  const baseUrl = https://\.github.io/\/icons/;
+
+  const grid = document.getElementById('grid');
+  const toast = document.getElementById('toast');
+  const q = document.getElementById('q');
+  const copyBaseBtn = document.getElementById('copyBase');
+
+  function showToast(msg){
+    toast.textContent = msg || "Copied!";
+    toast.classList.add('show');
+    setTimeout(()=>toast.classList.remove('show'),1200);
+  }
+
+  function render(items){
+    grid.innerHTML = "";
+    items.forEach(f=>{
+      if(!f.name.endsWith(".svg")) return;
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = 
+        <img src="\\" alt="\">
+        <div class="name">\</div>
+      ;
+      card.onclick = async ()=>{
+        const url = \\\\;
+        try { await navigator.clipboard.writeText(url); showToast("URL copied"); }
+        catch(e){ showToast(url); }
+      };
+      grid.appendChild(card);
+    });
+  }
+
+  async function load(){
+    const res = await fetch(apiUrl);
+    if(!res.ok){ grid.innerHTML = "Failed to load icons."; return; }
+    const data = await res.json();
+    window._icons = data;
+    render(data);
+  }
+
+  q.addEventListener('input', ()=>{
+    const term = q.value.trim().toLowerCase();
+    if(!window._icons) return;
+    render(window._icons.filter(f=>f.name.toLowerCase().includes(term)));
+  });
+
+  copyBaseBtn.onclick = async ()=>{
+    try { await navigator.clipboard.writeText(baseUrl); showToast("Base URL copied"); }
+    catch(e){ showToast(baseUrl); }
+  };
+
+  load();
+</script>
+</body>
+</html>
