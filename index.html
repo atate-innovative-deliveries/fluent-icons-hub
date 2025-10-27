@@ -1,21 +1,25 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Fluent Icons Hub</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
+    :root { --bd:#ddd; --ink:#111; --mut:#666; --card:#eee; }
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:24px}
     .top{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    input{padding:10px;border:1px solid #ddd;border-radius:8px;min-width:260px}
+    input{padding:10px;border:1px solid var(--bd);border-radius:8px;min-width:260px}
+    .seg{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+    .seg button{padding:8px 12px;border:1px solid var(--bd);border-radius:999px;background:#fff;cursor:pointer;font-size:13px}
+    .seg button.on{border-color:var(--ink);background:#f3f3f3}
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:16px;margin-top:16px}
-    .card{border:1px solid #eee;border-radius:12px;padding:12px;text-align:center;cursor:pointer}
+    .card{border:1px solid var(--card);border-radius:12px;padding:12px;text-align:center;cursor:pointer}
     .card:hover{box-shadow:0 2px 10px rgba(0,0,0,.08)}
     img{width:48px;height:48px;margin:8px auto;display:block}
     .name{font-size:12px;color:#555;word-break:break-all}
-    .pill{padding:6px 10px;border:1px solid #ddd;border-radius:999px;font-size:12px;cursor:pointer}
-    .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);
-      background:#111;color:#fff;padding:10px 14px;border-radius:10px;opacity:0;transition:.25s}
+    .pill{padding:6px 10px;border:1px solid var(--bd);border-radius:999px;font-size:12px;cursor:pointer}
+    .hint{font-size:12px;color:var(--mut)}
+    .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:10px;opacity:0;transition:.25s}
     .toast.show{opacity:1}
   </style>
 </head>
@@ -23,77 +27,168 @@
   <div class="top">
     <input id="q" placeholder="Search icons (e.g., poll, insights, chat)" />
     <button class="pill" id="copyBase">Copy base URL</button>
-    <span style="font-size:12px;color:#666">Click any icon to copy its direct URL</span>
+    <span class="hint">Click any icon to copy its direct URL</span>
   </div>
+
+  <!-- Regular / Filled toggle -->
+  <div class="seg" id="seg">
+    <button data-mode="all" class="on">All</button>
+    <button data-mode="regular">Regular</button>
+    <button data-mode="filled">Filled</button>
+  </div>
+
+  <!-- Category filter bar (buttons injected at runtime) -->
+  <div class="seg" id="cats" style="margin-top:6px"></div>
+
   <div class="grid" id="grid"></div>
   <div class="toast" id="toast">Copied!</div>
 
 <script>
+  // ---- CONFIG: your account + repo ----
   const GH_USER = "atate-innovative-deliveries";
   const GH_REPO = "fluent-icons-hub";
-  const BRANCH = "main";
+  const BRANCH  = "main";
   const baseUrl = `https://${GH_USER}.github.io/${GH_REPO}/`;
 
+  // ---- DOM refs ----
   const grid = document.getElementById("grid");
   const toast = document.getElementById("toast");
   const q = document.getElementById("q");
+  const seg = document.getElementById("seg");
+  const catsBar = document.getElementById("cats");
   const copyBaseBtn = document.getElementById("copyBase");
 
-  function showToast(msg) {
+  // ---- Category rules (filename keyword→bucket). Tweak freely. ----
+  const CATEGORY_RULES = [
+    { name: "Communication",     rx: /(chat|comment|mail|message|send|reply|mention|call|phone|callout|video|mic|camera|contact|share)\b/ },
+    { name: "People & Org",      rx: /(person|people|customer|group|organization|org|community|handshake|accessibility)\b/ },
+    { name: "Files & Content",   rx: /(file|folder|document|doc|page|text|image|picture|photo|table|clipboard|form|tab|library|book|note|edit|pen|copy|paste)\b/ },
+    { name: "Data & Analytics",  rx: /(chart|data|database|db|table|grid|pivot|analytics|trend|spark|calculator|math|function)\b/ },
+    { name: "Security & Alerts", rx: /(lock|unlock|shield|key|pass|certificate|alert|warning|error|bug|info|protection)\b/ },
+    { name: "Devices & Network", rx: /(desktop|laptop|pc|device|phone|tablet|usb|bluetooth|wifi|antenna|server|cloud|printer|battery)\b/ },
+    { name: "Media",             rx: /(play|pause|stop|record|music|speaker|volume|sound|subs|subtitle|caption)\b/ },
+    { name: "Time & Calendar",   rx: /(calendar|event|clock|time|timer|alarm|hourglass|timeline)\b/ },
+    { name: "Commerce",          rx: /(cart|wallet|credit|card|money|payment|receipt|gift)\b/ },
+    { name: "Maps & Travel",     rx: /(map|location|pin|globe|earth|target|compass|route|navigation|vehicle|car|airplane)\b/ },
+    { name: "Text & Formatting", rx: /(text|font|bold|italic|underline|align|bullet|number|quote|paragraph|proofing)\b/ },
+    { name: "Accessibility",     rx: /(accessibility|eye|view|vision|hearing|reader|immersive)\b/ }
+  ];
+  const OTHER_CATEGORY = "Other";
+
+  // ---- State ----
+  let ALL = [];         // array of 'icons/...svg' paths
+  let MODE = "all";     // 'all' | 'regular' | 'filled'
+  let CAT  = "All";     // category name
+
+  // ---- Helpers ----
+  function showToast(msg){
     toast.textContent = msg || "Copied!";
     toast.classList.add("show");
-    setTimeout(() => toast.classList.remove("show"), 1200);
+    setTimeout(()=>toast.classList.remove("show"),1200);
+  }
+  function nameFromPath(p){ return p.split("/").pop().replace(/\.svg$/i,""); }
+  function categoryFor(name){
+    const n = name.toLowerCase();
+    const hit = CATEGORY_RULES.find(rule => rule.rx.test(n));
+    return hit ? hit.name : OTHER_CATEGORY;
   }
 
-  let ALL = [];
+  function filterList(){
+    const term = q.value.trim().toLowerCase();
+    return ALL.filter(p=>{
+      const n = nameFromPath(p).toLowerCase();
 
-  function render(items) {
+      // Mode filter
+      const byMode =
+        MODE === "all" ||
+        (MODE === "regular" && n.includes("_regular")) ||
+        (MODE === "filled"  && n.includes("_filled"));
+
+      // Category filter
+      const byCat = (CAT === "All") || (categoryFor(n) === CAT);
+
+      // Search term
+      const byTerm = !term || n.includes(term);
+
+      return byMode && byCat && byTerm;
+    });
+  }
+
+  function render(items){
     grid.innerHTML = "";
-    items.forEach((path) => {
-      const name = path.split("/").pop();
-      const url = baseUrl + path;
+    items.forEach(path=>{
+      const file = path.split("/").pop();
+      const url  = baseUrl + path;
       const card = document.createElement("div");
       card.className = "card";
-      card.innerHTML = `<img src="${url}" alt="${name}"><div class="name">${name}</div>`;
-      card.onclick = async () => {
-        try {
-          await navigator.clipboard.writeText(url);
-          showToast("Copied!");
-        } catch (e) {
-          showToast(url);
-        }
+      card.innerHTML = `<img src="${url}" alt="${file}"><div class="name">${file}</div>`;
+      card.onclick = async ()=>{
+        try { await navigator.clipboard.writeText(url); showToast("URL copied"); }
+        catch(e){ showToast(url); }
       };
       grid.appendChild(card);
     });
   }
 
-  async function load() {
-    const api = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/git/trees/${BRANCH}?recursive=1`;
-    const res = await fetch(api);
-    if (!res.ok) {
-      grid.innerHTML = "❌ Failed to load icons (API limit).";
-      return;
-    }
-    const data = await res.json();
-    ALL = (data.tree || [])
-      .map((t) => t.path)
-      .filter((p) => p.startsWith("icons/") && p.endsWith(".svg"));
-    render(ALL);
+  function buildCategoryBar(){
+    // Count per category
+    const counts = {};
+    const orderBase = ["All",
+      "Communication","People & Org","Files & Content","Data & Analytics",
+      "Security & Alerts","Devices & Network","Media","Time & Calendar",
+      "Commerce","Maps & Travel","Text & Formatting","Accessibility", OTHER_CATEGORY];
+
+    orderBase.forEach(c=>counts[c]=0);
+    ALL.forEach(p=>{
+      const c = categoryFor(nameFromPath(p));
+      counts[c] = (counts[c]||0)+1;
+      counts["All"]++;
+    });
+
+    catsBar.innerHTML = "";
+    orderBase.forEach(name=>{
+      if(!counts[name]) return; // hide empty buckets
+      const b = document.createElement("button");
+      b.dataset.cat = name;
+      b.textContent = `${name} (${counts[name]})`;
+      if(name === CAT) b.classList.add("on");
+      b.onclick = ()=>{
+        CAT = name;
+        [...catsBar.querySelectorAll("button")].forEach(x=>x.classList.toggle("on", x===b));
+        render(filterList());
+      };
+      catsBar.appendChild(b);
+    });
   }
 
-  q.addEventListener("input", () => {
-    const term = q.value.trim().toLowerCase();
-    if (!ALL.length) return;
-    render(ALL.filter((p) => p.toLowerCase().includes(term)));
+  async function load(){
+    // Use Trees API so huge folders work
+    const api = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/git/trees/${BRANCH}?recursive=1`;
+    const res = await fetch(api);
+    if(!res.ok){ grid.innerHTML = "❌ Failed to load icons."; return; }
+    const data = await res.json();
+    ALL = (data.tree || [])
+      .map(t=>t.path)
+      .filter(p => p.startsWith("icons/") && p.toLowerCase().endsWith(".svg"));
+    buildCategoryBar();
+    render(filterList());
+  }
+
+  // Search
+  q.addEventListener("input", ()=> render(filterList()));
+
+  // Regular / Filled toggle
+  seg.addEventListener("click", (e)=>{
+    const b = e.target.closest("button"); if(!b) return;
+    MODE = b.dataset.mode;
+    seg.querySelectorAll("button").forEach(x=>x.classList.toggle("on", x===b));
+    render(filterList());
   });
 
-  copyBaseBtn.onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(baseUrl);
-      showToast("Base URL copied");
-    } catch (e) {
-      showToast(baseUrl);
-    }
+  // Copy base URL
+  copyBaseBtn.onclick = async ()=>{
+    try { await navigator.clipboard.writeText(baseUrl); showToast("Base URL copied"); }
+    catch(e){ showToast(baseUrl); }
   };
 
   load();
